@@ -1,15 +1,16 @@
 """Data model for a tracked apprenticeship opportunity."""
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Optional
 
 
 @dataclass
 class Opportunity:
-    source: str
-    employer: str
-    role: str
-    location: str
-    application_link: str
+    id: Optional[int] = None
+    source: str = ""
+    employer: str = ""
+    role: str = ""
+    location: str = ""
+    application_link: str = ""
     salary: str = ""
     opening_date: str = ""          # ISO date (posted date)
     deadline: str = ""              # ISO date (closing date)

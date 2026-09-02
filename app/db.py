@@ -156,6 +156,13 @@ class Storage:
             ).fetchone()
         return dict(row) if row else None
 
+    def id_for_key(self, dedup_key: str) -> Optional[int]:
+        with self._lock, self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM opportunities WHERE dedup_key=?", (dedup_key,)
+            ).fetchone()
+        return row["id"] if row else None
+
     def stats(self) -> dict:
         with self._lock, self._connect() as conn:
             total = conn.execute(

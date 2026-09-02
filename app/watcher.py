@@ -28,6 +28,7 @@ def run_scan(storage: Storage) -> dict:
             outcome = storage.upsert(opp)
             results[outcome] = results.get(outcome, 0) + 1
             if outcome == "new":
+                opp.id = storage.id_for_key(opp.dedup_key)
                 new_opps.append(opp)
 
     storage.mark_closed(all_keys)
