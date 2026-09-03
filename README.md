@@ -16,6 +16,11 @@ opportunity easy to review and act on.
   (default 30) inside the always-on Railway web process.
 - **Persistent storage** — SQLite on a Railway volume (`/data`), so data
   survives redeploys and restarts.
+- **Priority scoring** — every role is scored 0-100 for how well it matches
+  the watcher's focus: **digital marketing, AI/data, and business** topics,
+  **degree apprenticeships** (level 6/7), and hiring by **major employers**
+  (KPMG, Deloitte, PwC, EY, Accenture, and 60+ more). High-priority roles rank
+  at the top of the dashboard and are spotlighted first in alerts.
 - **Deduplication** — a stable `dedup_key` (source + employer + role + location
   + link) prevents duplicate listings across sources and scans.
 - **Time-sensitive detection** — flags **new** roles and **closing soon**
@@ -66,9 +71,12 @@ startup and then on the schedule.
 
 ## API
 
-- `GET /` — dashboard
+- `GET /` — dashboard (sorted by priority; score, topic, degree & major-employer
+  badges)
 - `GET /api/opportunities` — all tracked roles (JSON)
-- `GET /api/opportunities?region=manchester&status=active&closing_soon=1`
+- `GET /api/opportunities?region=manchester&status=active&closing_soon=1&topic=ai&min_priority=50&sort=priority`
+- `GET /api/priority` — top-scoring roles (digital marketing / AI / business
+  focus, degree apprenticeships and major employers weighted highest)
 - `GET /api/stats` — counts and source breakdown
 - `GET /api/run` — trigger a scan now
 - `GET /health` — health check
