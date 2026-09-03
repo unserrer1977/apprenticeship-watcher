@@ -1,7 +1,6 @@
 """Scan orchestration: run all sources, dedupe, store, alert."""
 import logging
 from datetime import datetime, timezone
-from typing import List
 
 from .config import config
 from .db import Storage
@@ -34,6 +33,11 @@ def run_scan(storage: Storage) -> dict:
             opp.topic = s["topic"]
             opp.is_degree = s["is_degree"]
             opp.big_employer = s["big_employer"]
+
+            # Scope filter: when ONLY_MAJOR_FIRMS, drop any role whose employer
+            # isn't a major firm. Skipped roles fall out via mark_closed.
+            if getattr(config, "only_major_firms", False) and not opp.big_employer:
+                continue
 
             all_keys.append(opp.dedup_key)
             outcome = storage.upsert(opp)

@@ -1,30 +1,27 @@
-"""Priority scoring for apprenticeship opportunities.
+"""Priority scoring prioritizes opportunities.
 
 Each opportunity is scored 0-100 for how well it matches the watcher's focus:
 digital marketing / AI / business topics, degree apprenticeships (level 6-7),
 and hiring by major employers (KPMG, Deloitte, PwC, EY, ...).
 
-Scores are stored on the row at upsert time so the dashboard and alerts can
-rank and spotlight the best matches without recomputing on every read.
+When ONLY_MAJOR_FIRMS is enabled, only opportunities whose employer matches the
+major-employer allowlist are stored at all.
 """
 import re
-from typing import List, Tuple
+from typing import List
 
-# ─── Target topics ─────────────────────────────────────────────────────────
-# Each topic is a list of keywords matched (case-insensitively) against the
-# role title, training course and description. Order lists most-specific-first.
 DIGITAL_MARKETING: List[str] = [
-    "digital market", "digital market", "social media", "content creator",
-    "paid media", "seo", "ppc", "email market", "growth market", "digital",
-    "marketing", "content", "advertis", "brand", "ecommerce", "e-commerce",
-    "crm", "campaign", "creative media", "media", "public relations", "pr ",
-    "copywriting", "web design", "ux", "insights", "audience",
+    "digital market", "social media", "content creator", "paid media", "seo",
+    "ppc", "email market", "growth market", "digital", "marketing", "content",
+    "advertis", "brand", "ecommerce", "e-commerce", "crm", "campaign",
+    "creative media", "media", "public relations", "copywriting", "web design",
+    "ux", "insights", "audience",
 ]
 AI: List[str] = [
     "artificial intelligence", "machine learning", "data science",
-    "data scientist", "ai ", "ai&", "computer vision", "llm", "nlp",
-    "data analyst", "data engineering", "data engineer", "cloud engineer",
-    "cloud analyst", "data",
+    "data scientist", "computer vision", "llm", "nlp", "data analyst",
+    "data engineering", "data engineer", "cloud engineer", "cloud analyst",
+    "data",
 ]
 BUSINESS: List[str] = [
     "digital market", "business analyst", "project management",
@@ -32,8 +29,8 @@ BUSINESS: List[str] = [
     "management", "finance", "accounting", "accountant", "consult",
     "commercial", "operations", "strategy", "people", "hr consultant",
     "human resources", "risk", "audit", "tax", "insurance", "procurement",
-    "supply chain", "sales", "business", "administration", "operations mgmt",
-    "legal", "law ", "customer service", "team leader", "supervisor",
+    "supply chain", "sales", "business", "administration", "legal", "law",
+    "customer service", "team leader", "supervisor",
 ]
 
 TOPIC_LABELS = {
@@ -42,24 +39,55 @@ TOPIC_LABELS = {
     "business": "Business",
 }
 
-# ─── Major employers (weighted heavily) ────────────────────────────────────
+# ── Major employers (the ONLY_MAJOR_FIRMS allowlist) ───────────────────────
+# Distinctive, unambiguous names — matched anywhere as whole words.
 _MAJOR_EMPLOYERS: List[str] = [
-    "kpmg", "deloitte", "pwc", "ernst & young", "ey", "accenture",
-    "mckinsey", "bain &", "bcg", "boston consulting", "goldman",
-    "jpmorgan", "jp morgan", "j.p. morgan", "morgan stanley", "barclays",
-    "hsbc", "lloyds", "natwest", "royal bank of scotland", "santander",
-    "nats", "bae systems", "rolls-royce", "rolls royce", "siemens", "ibm",
-    "microsoft", "amazon", "google", "meta", "apple", "cisco", "bt group",
-    "bt", "vodafone", "sky", "bbc", "itv", "unilever", "p&g",
-    "procter & gamble", "gsk", "glaxosmithkline", "astrazeneca", "bp",
-    "shell", "centrica", "national grid", "sse", "capita", "serco",
-    "dyson", "arm holdings", "johnson & johnson", "nutanix", "nvidia",
+    # Big 4 & professional services
+    "kpmg", "deloitte", "pwc", "ernst & young", "accenture", "mckinsey",
+    "boston consulting", "bcg", "capgemini", "grant thornton", "mazars",
+    "eversheds", "clifford chance", "linklaters", "dla piper", "ashurst",
+    "savills", "bdo",
+    # Investment banks & big finance
+    "goldman", "jpmorgan", "jp morgan", "j.p. morgan", "morgan stanley",
+    "barclays", "hsbc", "natwest", "royal bank of scotland", "santander", "lloyds",
+    "deutsche bank", "nomura", "blackrock",
+    # Tech
+    "microsoft", "amazon", "google", "meta", "apple", "cisco", "ibm",
+    "oracle", "salesforce", "sap", "nvidia", "intel", "arm holdings",
+    "nutanix", "epam",
+    # Telecom / broadcast / media
+    "vodafone", "channel 4", "virgin media", "itv",
+    # Energy / utilities
+    "centrica", "national grid", "schneider electric", "wessex water",
+    "network rail", "e.on",
+    # Aerospace / engineering / auto
+    "bae systems", "rolls-royce", "rolls royce", "jaguar land rover",
+    "ge aviation", "ge aerospace", "volkswagen", "honeywell", "galliford try",
+    "laing o'rourke", "transport for london", "babcock", "thales", "bosch",
+    "airbus", "siemens",
+    # Consumer / pharma / FMCG
+    "procter & gamble", "glaxosmithkline", "johnson & johnson", "coca-cola",
+    "reckitt", "astrazeneca", "pepsico", "arcadis", "beazley",
+    "unilever", "nestle", "mars", "loreal", "shell", "bmw", "nissan", "dyson",
+    # Broad services
+    "balfour beatty", "capita", "serco", "mitie", "dwp", "vistra",
+    "gkn", "cummins", "wates", "kier",
 ]
 
-# Match keywords as whole words/phrases (case-insensitive). "ey", "bt", "bp",
-# "sky", "sse" are short but rare enough as standalone employer tokens.
+# Short tokens (≤4 chars) that are common words — matched only when the employer
+# string STARTS with them, so "Sky"/"BT"/"EY"/"BP"/"EDF"/"GB" match but
+# "Blue Sky Dental"/"High Sky" do not.
+_SHORT_TOKENS: List[str] = [
+    "bt", "bp", "edf", "ge", "bbc", "ey", "ubs", "sse", "nats", "sky", "o2",
+]
+
+# Short token that is also a common English word; start-anchored is still used
+# but the token itself is rare enough.
 _COMPILED_MAJOR = [
     re.compile(r"\b" + re.escape(k) + r"\b", re.I) for k in _MAJOR_EMPLOYERS
+]
+_COMPILED_START = [
+    re.compile(r"^" + re.escape(k) + r"\b", re.I) for k in _SHORT_TOKENS
 ]
 
 # Degree apprenticeships are level 6 or 7 (or explicitly "degree").
@@ -67,25 +95,18 @@ _DEGREE_RE = re.compile(
     r"\(?(level\s*[67]|degree|honours|bachelor|masters|postgraduate)\)?",
     re.I,
 )
-
-# gov.uk levels present in the "Training course" field, e.g. "(level 4)".
 _LEVEL_RE = re.compile(r"\(level\s*(\d)\)", re.I)
 
 
 def _match_any(text: str, keywords: List[str]) -> bool:
     if not text:
         return False
-    for kw in keywords:
-        # Short keywords may over-match; still acceptable for scoring.
-        if kw in text:
-            return True
-    return False
+    text = text.lower()
+    return any(kw in text for kw in keywords)
 
 
 def classify_topic(role: str, training_course: str, description: str = "") -> str:
-    """Return the best-matching target topic, or '' if none."""
     candidate = f"{role} {training_course} {description}".lower()
-    # Normalise "ai" and "pr" collisions by checking for word-ish presence.
     if _match_any(candidate, AI):
         return "ai"
     if _match_any(candidate, DIGITAL_MARKETING):
@@ -96,12 +117,11 @@ def classify_topic(role: str, training_course: str, description: str = "") -> st
 
 
 def is_degree_apprenticeship(role: str, training_course: str) -> bool:
-    """True for level 6/7 (degree-level) apprenticeships."""
     txt = f"{role} {training_course}"
     if _DEGREE_RE.search(txt):
         return True
-    m = _LEVEL_RE.search(training_course or "")
-    if m and int(m.group(1)) >= 6:
+    mtxt = _LEVEL_RE.search(training_course or "")
+    if mtxt and int(mtxt.group(1)) >= 6:
         return True
     return False
 
@@ -109,33 +129,26 @@ def is_degree_apprenticeship(role: str, training_course: str) -> bool:
 def is_major_employer(employer: str) -> bool:
     if not employer:
         return False
-    low = employer.lower().strip()
-    for pat in _COMPILED_MAJOR:
-        if pat.search(low):
-            return True
-    return False
+    low = employer.strip().lower()
+    if any(pat.search(low) for pat in _COMPILED_MAJOR):
+        return True
+    return any(pat.search(low) for pat in _COMPILED_START)
 
 
 def score_opportunity(role: str, training_course: str, employer: str,
                       description: str = "") -> dict:
-    """Return a score dict for one opportunity.
-
-    Returns: {priority (int 0-100), topic, is_degree, big_employer}
-    """
     topic = classify_topic(role, training_course, description)
     degree = is_degree_apprenticeship(role, training_course)
     big = is_major_employer(employer)
-
-    score = 10  # baseline for any tracked role
+    score = 10
     if topic in ("digital_marketing", "ai"):
-        score += 40  # the watcher's primary focus
+        score += 40
     elif topic == "business":
         score += 30
     if degree:
         score += 30
     if big:
         score += 25
-
     return {
         "priority": min(score, 100),
         "topic": topic,

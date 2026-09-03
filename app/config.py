@@ -68,6 +68,10 @@ class Config:
         )
         self.higherin_enabled = _bool("HIGHERIN_ENABLED", True)
 
+        # Scope: only track apprenticeships from major employers. When true
+        # (default), any role whose employer isn't in the major list is dropped.
+        self.only_major_firms = _bool("ONLY_MAJOR_FIRMS", True)
+
     @staticmethod
     def _json_list(name: str, default):
         v = os.getenv(name)
