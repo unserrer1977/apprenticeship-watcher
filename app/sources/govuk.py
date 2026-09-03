@@ -48,6 +48,7 @@ class GovUKSource(Source):
     name = "govuk"
 
     def fetch(self) -> Iterator[Opportunity]:
+        # 1. Location-based searches (the standard NW coverage).
         for location in config.locations:
             for page in range(1, config.govuk_pages + 1):
                 try:
@@ -60,6 +61,30 @@ class GovUKSource(Source):
                     break
                 for opp in items:
                     yield opp
+        # 2. Big-employer name searches (national — catches the firms that
+        #    recruit through the portal regardless of NW location).
+        if getattr(config, "employer_search_enabled", False):
+            for employer in config.employer_search_terms:
+                try:
+                    items = self._search_employer(employer, page=1)
+                except requests.RequestException as exc:
+                    log.warning("govuk employer search (%s) failed: %s",
+                                employer, exc)
+                    continue
+                for opp in items:
+                    yield opp
+
+    def _search_employer(self, employer: str, page: int) -> list:
+        params = {
+            "searchTerm": employer,
+            "sort": "AgeAsc",  # newest first
+            "pageNumber": page,
+        }
+        resp = requests.get(SEARCH_URL, params=params, headers=HEADERS,
+                            timeout=30)
+        resp.raise_for_status()
+        # National search — no location, so region derives from the result.
+        return self._parse(resp.text, "")
 
     def _fetch_page(self, location: str, page: int) -> list:
         params = {

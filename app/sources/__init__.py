@@ -3,10 +3,12 @@ from .base import Source
 from .govuk import GovUKSource
 from .employer_pages import EmployerPagesSource
 from .linkedin import LinkedInSource
+from .higherin import HigherinSource
 
 __all__ = [
     "Source",
     "GovUKSource",
     "EmployerPagesSource",
     "LinkedInSource",
+    "HigherinSource",
 ]

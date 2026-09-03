@@ -18,6 +18,7 @@ SOURCE_LABELS = {
     "govuk": "GOV.UK",
     "employer": "Employer",
     "linkedin": "LinkedIn",
+    "higherin": "Higherin",
 }
 
 

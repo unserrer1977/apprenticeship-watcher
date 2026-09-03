@@ -54,6 +54,20 @@ class Config:
         self.li_at = os.getenv("LI_AT", "").strip()
         self.employer_pages = self._json_list("EMPLOYER_PAGES", [])
 
+        # NOTE: the gov.uk searchTerm field is a relevance search, not an exact
+        # employer filter — searching "EY"/"Arm"/"Sky" matches Early Years /
+        # pub arms / skyline, flooding the DB with noise. Big-firm coverage is
+        # handled properly by the Higherin source, so this is OFF by default.
+        self.employer_search_terms = self._json_list("EMPLOYER_SEARCH_TERMS", [])
+        self.employer_search_enabled = _bool("EMPLOYER_SEARCH_ENABLED", False)
+
+        # Higherin (RateMyApprenticeship) — the authoritative source for
+        # big-firm and degree apprenticeships.
+        self.higherin_routes = self._json_list(
+            "HIGHERIN_ROUTES", ["degree-apprenticeship", "apprenticeships"]
+        )
+        self.higherin_enabled = _bool("HIGHERIN_ENABLED", True)
+
     @staticmethod
     def _json_list(name: str, default):
         v = os.getenv(name)

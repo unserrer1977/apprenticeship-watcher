@@ -34,6 +34,7 @@ opportunity easy to review and act on.
 | Source | Status | Notes |
 |---|---|---|
 | GOV.UK Find an apprenticeship | ✅ Primary | Official, reliable, has closing dates + wages |
+| Higherin (RateMyApprenticeship) | ✅ Big-firm + degree | KPMG, Deloitte, PwC, EY, UBS, Unilever + degree apprenticeships |
 | Employer career pages | ⚙️ Best-effort | Configurable list of career-page URLs |
 | LinkedIn | ⚙️ Optional | Needs a `LI_AT` session cookie in env |
 
@@ -68,6 +69,8 @@ startup and then on the schedule.
 | `WHATSAPP_PHONE` | — | WhatsApp number to alert (E.164, no `+`) |
 | `LI_AT` | — | Optional LinkedIn session cookie |
 | `EMPLOYER_PAGES` | `[]` | JSON list of employer career-page URLs |
+| `HIGHERIN_ENABLED` | `true` | Enable the Higherin (RateMyApprenticeship) source |
+| `HIGHERIN_ROUTES` | `["degree-apprenticeship","apprenticeships"]` | Higherin search routes |
 
 ## API
 

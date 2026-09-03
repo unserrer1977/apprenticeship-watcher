@@ -5,13 +5,16 @@ from typing import List
 
 from .config import config
 from .db import Storage
-from .sources import GovUKSource, EmployerPagesSource, LinkedInSource
+from .sources import GovUKSource, EmployerPagesSource, LinkedInSource, HigherinSource
 
 log = logging.getLogger(__name__)
 
 
 def _sources():
-    return [GovUKSource(), EmployerPagesSource(), LinkedInSource()]
+    s = [GovUKSource(), EmployerPagesSource(), LinkedInSource()]
+    if getattr(config, "higherin_enabled", True):
+        s.append(HigherinSource())
+    return s
 
 
 def run_scan(storage: Storage) -> dict:
