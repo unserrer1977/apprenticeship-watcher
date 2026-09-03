@@ -24,6 +24,10 @@ CREATE TABLE IF NOT EXISTS opportunities (
     training_course TEXT,
     description TEXT,
     region TEXT,
+    priority INTEGER DEFAULT 10,
+    topic TEXT DEFAULT '',
+    is_degree INTEGER DEFAULT 0,
+    big_employer INTEGER DEFAULT 0,
     first_seen TEXT,
     last_seen TEXT,
     status TEXT DEFAULT 'active',
@@ -56,6 +60,16 @@ class Storage:
     def _init(self):
         with self._lock, self._connect() as conn:
             conn.executescript(_SCHEMA)
+            # Migrate existing databases that predate priority scoring.
+            for col, ddl in (
+                ("priority", "ALTER TABLE opportunities ADD COLUMN priority INTEGER DEFAULT 10"),
+                ("topic", "ALTER TABLE opportunities ADD COLUMN topic TEXT DEFAULT ''"),
+                ("is_degree", "ALTER TABLE opportunities ADD COLUMN is_degree INTEGER DEFAULT 0"),
+                ("big_employer", "ALTER TABLE opportunities ADD COLUMN big_employer INTEGER DEFAULT 0"),
+            ):
+                cols = [r["name"] for r in conn.execute("PRAGMA table_info(opportunities)")]
+                if col not in cols:
+                    conn.execute(ddl)
             conn.commit()
 
     def upsert(self, opp: Opportunity) -> str:
@@ -78,14 +92,16 @@ class Storage:
                     """INSERT INTO opportunities
                        (dedup_key, source, employer, role, location, salary,
                         application_link, opening_date, deadline, start_date,
-                        training_course, description, region, first_seen,
-                        last_seen, status, alerted_new, alerted_deadline)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        training_course, description, region, priority, topic,
+                        is_degree, big_employer, first_seen, last_seen, status,
+                        alerted_new, alerted_deadline)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (
                         opp.dedup_key, opp.source, opp.employer, opp.role,
                         opp.location, opp.salary, opp.application_link,
                         opp.opening_date, opp.deadline, opp.start_date,
                         opp.training_course, opp.description, opp.region,
+                        opp.priority, opp.topic, opp.is_degree, opp.big_employer,
                         opp.first_seen, opp.last_seen, opp.status,
                         opp.alerted_new, opp.alerted_deadline,
                     ),
@@ -99,13 +115,15 @@ class Storage:
                      employer=?, role=?, location=?, salary=?,
                      application_link=?, opening_date=?, deadline=?,
                      start_date=?, training_course=?, description=?,
-                     region=?, last_seen=?, status='active'
+                     region=?, priority=?, topic=?, is_degree=?,
+                     big_employer=?, last_seen=?, status='active'
                    WHERE dedup_key=?""",
                 (
                     opp.employer, opp.role, opp.location, opp.salary,
                     opp.application_link, opp.opening_date, opp.deadline,
                     opp.start_date, opp.training_course, opp.description,
-                    opp.region, now, opp.dedup_key,
+                    opp.region, opp.priority, opp.topic, opp.is_degree,
+                    opp.big_employer, now, opp.dedup_key,
                 ),
             )
             conn.commit()
@@ -126,7 +144,9 @@ class Storage:
 
     def list(self, region: Optional[str] = None, status: Optional[str] = None,
              source: Optional[str] = None, closing_soon: bool = False,
-             days: Optional[int] = None) -> List[dict]:
+             days: Optional[int] = None, topic: Optional[str] = None,
+             min_priority: Optional[int] = None,
+             sort: str = "newest") -> List[dict]:
         q = "SELECT * FROM opportunities WHERE 1=1"
         params = []
         if region:
@@ -138,13 +158,22 @@ class Storage:
         if source:
             q += " AND source=?"
             params.append(source)
+        if topic:
+            q += " AND topic=?"
+            params.append(topic)
+        if min_priority is not None:
+            q += " AND priority>=?"
+            params.append(min_priority)
         if closing_soon:
             q += " AND status='active' AND deadline != '' AND deadline IS NOT NULL"
-        q += " ORDER BY "
-        if closing_soon:
-            q += "deadline ASC"
+        if sort == "priority":
+            q += " ORDER BY priority DESC, deadline ASC NULLS LAST"
+        elif sort == "deadline":
+            q += " ORDER BY deadline ASC NULLS LAST"
+        elif closing_soon:
+            q += " ORDER BY deadline ASC NULLS LAST"
         else:
-            q += "first_seen DESC"
+            q += " ORDER BY first_seen DESC"
         with self._lock, self._connect() as conn:
             rows = conn.execute(q, params).fetchall()
         return [dict(r) for r in rows]

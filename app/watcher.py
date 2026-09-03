@@ -24,6 +24,14 @@ def run_scan(storage: Storage) -> dict:
         opps = source.run()
         results["sources"][source.name] = len(opps)
         for opp in opps:
+            from .scoring import score_opportunity
+            s = score_opportunity(opp.role, opp.training_course,
+                                  opp.employer, opp.description)
+            opp.priority = s["priority"]
+            opp.topic = s["topic"]
+            opp.is_degree = s["is_degree"]
+            opp.big_employer = s["big_employer"]
+
             all_keys.append(opp.dedup_key)
             outcome = storage.upsert(opp)
             results[outcome] = results.get(outcome, 0) + 1

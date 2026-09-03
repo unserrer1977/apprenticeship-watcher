@@ -3,6 +3,7 @@ from datetime import date, datetime
 from html import escape
 
 from .config import config
+from .scoring import TOPIC_LABELS
 
 REGION_LABELS = {
     "manchester": "Manchester",
@@ -65,8 +66,16 @@ def render_dashboard(opps: list, stats: dict) -> str:
             badges.append('<span class="badge badge-closed">CLOSED</span>')
         region = REGION_LABELS.get(o.get("region"), o.get("region") or "—")
         source = SOURCE_LABELS.get(o.get("source"), o.get("source"))
+        topic = TOPIC_LABELS.get(o.get("topic"))
+        prio = o.get("priority") or 0
+        prio_class = ("prio-hi" if prio >= 75 else "prio-mid" if prio >= 50
+                      else "prio-lo")
+        topic_badge = f'<span class="pill pill-topic pill-{escape(o.get("topic") or "none")}">{escape(topic)}</span>' if topic else ""
+        degree_badge = '<span class="badge badge-degree">DEGREE</span>' if o.get("is_degree") else ""
+        big_badge = '<span class="badge badge-big">★ MAJOR</span>' if o.get("big_employer") else ""
         rows.append(f"""
         <tr class="{'row-closed' if o.get('status') == 'closed' else ''}">
+          <td class="prio"><span class="prio-badge {prio_class}">{prio}</span></td>
           <td class="role">
             <a href="{escape(o.get('application_link') or '#')}" target="_blank"
                rel="noopener">{escape(o.get('role') or '—')}</a>
@@ -75,17 +84,15 @@ def render_dashboard(opps: list, stats: dict) -> str:
           <td>{escape(o.get('location') or '—')}</td>
           <td><span class="pill pill-{escape(o.get('region') or 'other')}">{escape(region)}</span></td>
           <td>{escape(o.get('salary') or '—')}</td>
-          <td>{_fmt(o.get('opening_date'))}</td>
-          <td class="deadline">{_fmt(o.get('deadline'))}</td>
+          <td>{_fmt(o.get('deadline'))}</td>
           <td><span class="pill pill-src">{escape(source)}</span></td>
-          <td>{' '.join(badges)}</td>
+          <td>{topic_badge} {degree_badge} {big_badge} {' '.join(badges)}</td>
         </tr>""")
 
     body = "\n".join(rows) if rows else (
         '<tr><td colspan="8" class="empty">No opportunities yet. '
         'Run a scan or wait for the next scheduled one.</td></tr>'
     )
-
     by_source = "".join(
         f'<div class="stat"><b>{v}</b><span>{SOURCE_LABELS.get(k, k)}</span></div>'
         for k, v in sorted(stats.get("by_source", {}).items())
@@ -143,6 +150,19 @@ def render_dashboard(opps: list, stats: dict) -> str:
   .pill-sheffield {{ color:#86efac; border-color:#15803d; }}
   .pill-nw {{ color:#fcd34d; border-color:#a16207; }}
   .pill-src {{ color:var(--muted); }}
+  .prio {{ width:44px; }}
+  .prio-badge {{ display:inline-block; min-width:30px; text-align:center;
+                 font-weight:700; font-size:12px; padding:3px 6px;
+                 border-radius:8px; }}
+  .prio-hi {{ background:rgba(34,197,94,.18); color:#4ade80; }}
+  .prio-mid {{ background:rgba(17,104,234,.18); color:#60a5fa; }}
+  .prio-lo {{ background:rgba(143,163,192,.15); color:var(--muted); }}
+  .badge-degree {{ background:rgba(17,104,234,.2); color:#60a5fa; }}
+  .badge-big {{ background:rgba(250,204,21,.18); color:#facc15; }}
+  .pill-topic {{ font-weight:700; }}
+  .pill-digital_marketing {{ color:#7dd3fc; border-color:#0284c7; }}
+  .pill-ai {{ color:#c084fc; border-color:#7e22ce; }}
+  .pill-business {{ color:#fbbf24; border-color:#b45309; }}
   .row-closed {{ opacity:.45; }}
   .row-closed .role a {{ text-decoration:line-through; }}
   .empty {{ text-align:center; color:var(--muted); padding:40px; }}
@@ -188,6 +208,7 @@ def render_dashboard(opps: list, stats: dict) -> str:
     </select>
   </label>
   <label><input type="checkbox" id="f-close" onchange="apply()"> Closing soon</label>
+  <label><input type="checkbox" id="f-prio" onchange="apply()"> Priority only</label>
   <label>Search <input type="text" id="f-q" placeholder="role, employer…"
          oninput="apply()"></label>
   <button class="btn" onclick="runScan()">Run scan now</button>
@@ -195,8 +216,8 @@ def render_dashboard(opps: list, stats: dict) -> str:
 <div class="wrap">
   <table>
     <thead><tr>
-      <th>Role</th><th>Location</th><th>Region</th><th>Salary</th>
-      <th>Opened</th><th>Deadline</th><th>Source</th><th>Flags</th>
+      <th>Score</th><th>Role</th><th>Location</th><th>Region</th>
+      <th>Salary</th><th>Deadline</th><th>Source</th><th>Flags</th>
     </tr></thead>
     <tbody id="rows">{body}</tbody>
   </table>
@@ -210,6 +231,7 @@ def render_dashboard(opps: list, stats: dict) -> str:
     const source = document.getElementById('f-source').value;
     const status = document.getElementById('f-status').value;
     const close = document.getElementById('f-close').checked;
+    const prioOnly = document.getElementById('f-prio').checked;
     const q = document.getElementById('f-q').value.toLowerCase();
     rows.forEach(r => {{
       const t = r.textContent.toLowerCase();
@@ -217,12 +239,14 @@ def render_dashboard(opps: list, stats: dict) -> str:
       const srcCell = r.querySelector('.pill-src').textContent.toLowerCase();
       const isClosed = r.classList.contains('row-closed');
       const closing = r.textContent.includes('CLOSES');
+      const score = Number(r.querySelector('.prio-badge').textContent) || 0;
       let show = true;
       if (region && regionCell !== region) show = false;
       if (source && srcCell !== source) show = false;
       if (status === 'active' && isClosed) show = false;
       if (status === 'closed' && !isClosed) show = false;
       if (close && !closing) show = false;
+      if (prioOnly && score < 50) show = false;
       if (q && !t.includes(q)) show = false;
       r.style.display = show ? '' : 'none';
     }});

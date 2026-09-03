@@ -18,6 +18,11 @@ class Opportunity:
     training_course: str = ""
     description: str = ""
     region: str = ""                # manchester / leeds / nw / other
+    # Priority scoring (computed)
+    priority: int = 10
+    topic: str = ""                 # digital_marketing / ai / business / ""
+    is_degree: int = 0
+    big_employer: int = 0
     dedup_key: str = ""
     first_seen: str = ""
     last_seen: str = ""

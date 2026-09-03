@@ -56,7 +56,9 @@ def health():
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
-    opps = storage.list(status="active")
+    # Default view: prioritised (digital marketing / AI / business, degree,
+    # major employers first), active roles.
+    opps = storage.list(status="active", sort="priority")
     return HTMLResponse(render_dashboard(opps, storage.stats()))
 
 
@@ -65,14 +67,31 @@ def opportunities(
     region: str = Query("", description="manchester, leeds, nw, ..."),
     source: str = Query(""),
     status: str = Query("active"),
+    topic: str = Query("", description="digital_marketing, ai, business"),
+    min_priority: int = Query(0, description="only roles with priority >= this"),
     closing_soon: bool = Query(False),
+    sort: str = Query("newest", description="newest, priority, deadline"),
 ):
     return storage.list(
         region=region or None,
         source=source or None,
         status=status or None,
+        topic=topic or None,
+        min_priority=min_priority or None,
         closing_soon=closing_soon,
+        sort=sort,
     )
+
+
+@app.get("/api/priority")
+def priority_list(
+    min_priority: int = Query(50),
+    limit: int = Query(50, le=200),
+):
+    """Top-scoring opportunities (digital marketing / AI / business focus,
+    degree apprenticeships and major employers weighted highest)."""
+    return storage.list(status="active", min_priority=min_priority,
+                        sort="priority")[:limit]
 
 
 @app.get("/api/stats")

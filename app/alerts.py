@@ -43,20 +43,38 @@ def _role_line(opp: dict) -> str:
         parts.append(opp["salary"])
     if opp.get("deadline"):
         parts.append(f"closes {_fmt_date(opp['deadline'])}")
-    return " • ".join(parts)
+    line = " • ".join(parts)
+    if opp.get("is_degree"):
+        line = f"🎓 {line}"
+    if opp.get("big_employer"):
+        line = f"🏢 {line}"
+    return line
+
+
+def _spotlight(opp: dict) -> bool:
+    """True for roles worth spotlighting regardless of raw ordering."""
+    return bool(opp.get("big_employer") or opp.get("is_degree"))
 
 
 def send_new_roles(storage: Storage, new_opps: List[Opportunity]):
-    """Alert on newly discovered roles, then mark them alerted."""
+    """Alert on newly discovered roles, then mark them alerted.
+
+    High-priority matches (big employers, degree apprenticeships, target
+    topics) are listed and marked first so they always surface.
+    """
     if not new_opps:
         return
     client = _client()
+    # Highest priority first.
+    new_opps = sorted(new_opps, key=lambda o: (o.priority, o.big_employer),
+                      reverse=True)
     lines = [f"🆕 {len(new_opps)} new apprenticeship role(s) in the North West:"]
-    for opp in new_opps[:10]:
+    top = [o for o in new_opps if _spotlight(o.to_dict())]
+    for opp in (top[:6] if top else new_opps[:10]):
         lines.append(f"• {_role_line(opp.to_dict())}")
         lines.append(f"  {opp.application_link}")
-    if len(new_opps) > 10:
-        lines.append(f"…and {len(new_opps) - 10} more (see dashboard)")
+    if len(new_opps) > (6 if top else 10):
+        lines.append(f"…and {len(new_opps) - (6 if top else 10)} more (see dashboard)")
     message = "\n".join(lines)
     _send(client, message)
     for opp in new_opps:
@@ -64,7 +82,10 @@ def send_new_roles(storage: Storage, new_opps: List[Opportunity]):
 
 
 def send_deadline_alerts(storage: Storage):
-    """Alert on roles closing within the alert window, once each."""
+    """Alert on roles closing within the alert window, once each.
+
+    Roles closing soon AND high priority are listed first.
+    """
     client = _client()
     today = date.today()
     window = config.deadline_alert_days
@@ -79,7 +100,8 @@ def send_deadline_alerts(storage: Storage):
             due.append((opp, days_left))
     if not due:
         return
-    due.sort(key=lambda x: x[1])
+    # Sort: highest priority first, then soonest deadline.
+    due.sort(key=lambda x: (-(x[0].get("priority") or 0), x[1]))
     lines = [f"⏰ {len(due)} apprenticeship deadline(s) approaching:"]
     for opp, days_left in due:
         urgency = "🔴" if days_left <= 2 else "🟠"
